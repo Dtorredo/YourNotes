@@ -35,18 +35,13 @@
 
 <!-- Floating User Profile (removed duplicate; sidebar now holds the profile controls) -->
 
-<!-- Y.js CRDT Library -->
-<!-- Load directly from local node_modules to avoid CDN issues in development -->
-<script src="/node_modules/yjs/dist/yjs.js"></script>
-<script src="/node_modules/y-indexeddb/dist/y-indexeddb.js"></script>
-
 <!-- Firebase -->
 <script defer src="https://www.gstatic.com/firebasejs/3.6.4/firebase.js"></script>
 
 <!-- App Scripts -->
-<script src="interface.js"></script>
-<script defer src="collaboration.js"></script>
 <script defer src="store.js"></script>
+<script defer src="interface.js"></script>
+<script defer type="module" src="collaboration.js"></script>
 <script defer src="migrate.js"></script>
 
 <link href="https://fonts.googleapis.com/css?family=Droid+Sans+Mono" rel="stylesheet">

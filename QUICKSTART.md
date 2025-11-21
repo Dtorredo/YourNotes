@@ -8,7 +8,7 @@
 npm start
 ```
 
-The app will run on `http://localhost:7713`
+The app will run on `http://localhost:3001`
 
 ### Step 2: Authenticate
 

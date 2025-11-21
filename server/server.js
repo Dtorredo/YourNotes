@@ -1,12 +1,14 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const http = require("http");
+const WebSocket = require("ws");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5001;
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
@@ -96,6 +98,21 @@ app.post("/api/ai", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`AI helper server running on http://localhost:${PORT}`);
+// HTTP server shared by Express and WebSocket
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+// Simple broadcast relay: any collab update from one client goes to all others.
+wss.on("connection", (ws) => {
+  ws.on("message", (data) => {
+    for (const client of wss.clients) {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    }
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`AI helper + collab WS running on http://localhost:${PORT}`);
 });

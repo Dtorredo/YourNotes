@@ -220,7 +220,7 @@ const setTheme = () => {
   let theme, icon;
   if (localStorage.night) {
     theme = {
-      backgroundColor: "#20222B",
+      backgroundColor: "#778873",
       color: "#EFEFEF",
     };
     icon = "☀️";
@@ -285,14 +285,27 @@ if (sharedNoteId && typeof renderCollaborativeNote === "function") {
   }, 1000);
 }
 
-/* Register service worker */
+/* Service worker handling
+ *
+ * On localhost we aggressively UNREGISTER any existing service workers
+ * for this origin to avoid stale-cache issues during development.
+ * In production, we still support the service worker for offline/PWA.
+ */
 
-if (
-  "serviceWorker" in navigator &&
-  window.location.hostname !== "localhost" &&
-  window.location.hostname !== "127.0.0.1"
-) {
-  navigator.serviceWorker.register("/sw.js", { scope: "/" });
+if ("serviceWorker" in navigator) {
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  ) {
+    // Dev: nuke all registrations on this origin
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => regs.forEach((r) => r.unregister()))
+      .catch((e) => console.warn("Failed to unregister service workers:", e));
+  } else {
+    // Prod: keep PWA/offline behavior
+    navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  }
 }
 
 /* Collaboration helper functions */

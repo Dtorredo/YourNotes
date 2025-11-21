@@ -3,6 +3,11 @@ let database;
 let currentUser = null;
 let currentCollaborativeNote = null;
 
+// Generate unique ID for collaborative notes (local helper, avoids globals)
+const generateNoteId = () => {
+  return "note_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+};
+window.generateNoteId = generateNoteId;
 /* initialize firebase */
 const firebaseConfig = {
   apiKey: "AIzaSyBV-GHwBk1Bibx9xolT7IdvsQ8mjgO-fkU",
@@ -248,8 +253,8 @@ const createCollaborativeNote = async (textarea, initialContent = "") => {
   const noteId = generateNoteId();
   const collabNote = await loadCollaborativeNote(noteId, textarea);
 
-  if (initialContent) {
-    collabNote.yText.insert(0, initialContent);
+  if (initialContent && typeof collabNote.setContent === "function") {
+    collabNote.setContent(initialContent);
   }
 
   // Add to sidebar
