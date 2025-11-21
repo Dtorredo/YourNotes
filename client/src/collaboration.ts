@@ -1,4 +1,5 @@
-import { database } from './store';
+import { database } from "./firebase";
+import { ref, child, set } from "firebase/database";
 
 export class CollaborativeNote {
   noteId: string;
@@ -9,7 +10,7 @@ export class CollaborativeNote {
 
   constructor(noteId: string, firebaseDatabase: any, currentUser: any) {
     this.noteId = noteId;
-    this.firebaseDatabase = firebaseDatabase; // kept for metadata/share helpers
+    this.firebaseDatabase = database; // kept for metadata/share helpers
     this.currentUser = currentUser;
     this.content = "";
     this.ws = null;
@@ -44,11 +45,13 @@ export class CollaborativeNote {
     });
 
     // WebSocket connection to Node backend
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     // Use port 4000 for dev (as per .env), or same host for prod
     // In a real setup, this should be an env var
-    const wsUrl = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    const wsUrl =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
         ? "ws://localhost:4000"
         : `${protocol}//${window.location.host}`;
 
@@ -97,16 +100,22 @@ export class CollaborativeNote {
 }
 
 // Share a note with other users
-export const shareNote = async (noteId: string, userEmail: string, permission = "write") => {
-  const noteRef = database.ref(
+export const shareNote = async (
+  noteId: string,
+  userEmail: string,
+  permission = "write"
+) => {
+  const noteRef = ref(
+    database,
     `collaborative-notes/${noteId}/metadata/collaborators`
   );
 
   // In a real app, you'd look up the user by email
   // For now, we'll just add a placeholder
   const shareId = "shared_" + Date.now();
+  const shareRef = child(noteRef, shareId);
 
-  await noteRef.child(shareId).set({
+  await set(shareRef, {
     email: userEmail,
     permission: permission,
     addedAt: Date.now(),

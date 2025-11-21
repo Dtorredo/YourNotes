@@ -25,7 +25,7 @@ npm install
 npm run dev   # runs UI + AI helper server
 ```
 
-Open `http://localhost:3001` in your browser (UI) and `http://localhost:5001` hosts the Gemini + collab WebSocket backend.
+Open `http://localhost:3001` in your browser (UI) and `http://localhost:4000` hosts the Gemini + collab WebSocket backend.
 
 ### 📚 Documentation
 

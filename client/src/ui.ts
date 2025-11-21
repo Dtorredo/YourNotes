@@ -1,16 +1,33 @@
-import { notes, saveLocally, persist, currentUser, loadCollaborativeNote, createCollaborativeNote, getCollaborativeNotes, currentCollaborativeNote } from './store';
-import { getNoteIdFromUrl, getShareableLink } from './collaboration';
+import {
+  notes,
+  saveLocally,
+  persist,
+  currentUser,
+  loadCollaborativeNote,
+  createCollaborativeNote,
+  getCollaborativeNotes,
+  currentCollaborativeNote,
+  updateCollaborativeNoteTitle,
+} from "./store";
+import { getNoteIdFromUrl, getShareableLink } from "./collaboration";
 
 // We need to use 'any' for DOM elements initially because they might be null
 // and we are not doing strict null checks to match the original loose logic
-const textarea = document.getElementsByTagName("textarea")[0] as HTMLTextAreaElement;
+const textarea = document.getElementsByTagName(
+  "textarea"
+)[0] as HTMLTextAreaElement;
 const sidebar = document.getElementsByTagName("sidebar")[0] as HTMLElement;
 const list = document.getElementsByTagName("list")[0] as HTMLElement;
 const toggle = document.getElementsByTagName("toggle")[0] as HTMLElement;
 const night = document.getElementsByTagName("night")[0] as HTMLElement;
-const aiSelectionToolbar = document.getElementById("ai-selection-toolbar") as HTMLElement;
-const aiSelectionPrompt = document.getElementById("ai-selection-prompt") as HTMLInputElement;
+const aiSelectionToolbar = document.getElementById(
+  "ai-selection-toolbar"
+) as HTMLElement;
+const aiSelectionPrompt = document.getElementById(
+  "ai-selection-prompt"
+) as HTMLInputElement;
 const aiEditToggle = document.getElementById("ai-edit-toggle") as HTMLElement;
+const newCollabBtn = document.getElementById("new-collab-btn") as HTMLElement;
 
 let hasAutoTitle = false;
 console.log("ui.ts loaded");
@@ -18,13 +35,8 @@ console.log("ui.ts loaded");
 const AI_API_BASE =
   (window as any).AI_API_BASE ||
   (window.location.hostname === "localhost"
-    ? "/api" // Use relative path with Vite proxy (maps to http://localhost:5001/api)
-    : "/api"); // Assume prod serves API at /api
-// Wait, the original code had http://localhost:4000 or window.location.origin.
-// The server.ts is listening on 5001 (or env PORT).
-// Vite proxy sends /api to http://localhost:5001.
-// So using `/api` is correct for both dev (via proxy) and prod (if served by express).
-// But let's stick to `/api` which means `http://localhost:3001/api` -> `http://localhost:5001/api`
+    ? "/api" // Vite proxy maps /api → http://localhost:4000/api in dev
+    : "/api"); // In prod, Express should serve API at /api
 
 let activeSelectionRange: { start: number; end: number } | null = null;
 
@@ -47,7 +59,7 @@ export const renderSidebar = (notes: any, collaborativeNotes: any = {}) => {
 
   for (let noteId of collabIds) {
     const note = collaborativeNotes[noteId];
-    const title = note.title || "_untitled";
+    const title = note.summary || note.title || "_untitled";
     const icon = "👥"; // Collaboration icon
     html += `<div class="note-item collaborative" data-note-id="${noteId}" data-type="collaborative">${icon} ${title}</div>`;
   }
@@ -60,22 +72,21 @@ export const renderSidebar = (notes: any, collaborativeNotes: any = {}) => {
 };
 
 // Delegate click events on list
-list.addEventListener('click', (event: Event) => {
-    const target = event.target as HTMLElement;
-    // Handle direct clicks or clicks on children
-    const noteItem = target.closest('.note-item');
-    if (noteItem) {
-        const type = noteItem.getAttribute('data-type');
-        if (type === 'legacy') {
-            const title = noteItem.getAttribute('data-title');
-            if (title) renderNote(title);
-        } else if (type === 'collaborative') {
-            const noteId = noteItem.getAttribute('data-note-id');
-            if (noteId) changeCollaborativeNote(noteId);
-        }
+list.addEventListener("click", (event: Event) => {
+  const target = event.target as HTMLElement;
+  // Handle direct clicks or clicks on children
+  const noteItem = target.closest(".note-item");
+  if (noteItem) {
+    const type = noteItem.getAttribute("data-type");
+    if (type === "legacy") {
+      const title = noteItem.getAttribute("data-title");
+      if (title) renderNote(title);
+    } else if (type === "collaborative") {
+      const noteId = noteItem.getAttribute("data-note-id");
+      if (noteId) changeCollaborativeNote(noteId);
     }
+  }
 });
-
 
 const changeCollaborativeNote = async (noteId: string) => {
   await renderCollaborativeNote(noteId);
@@ -106,7 +117,7 @@ function updateShareButton() {
   }
 }
 
-import { activeNote } from './store';
+import { activeNote } from "./store";
 
 export const renderNote = (title: string) => {
   activeNote.title = title;
@@ -217,12 +228,26 @@ const debounce = (func: Function) => {
 };
 
 export const reset = () => {
-  saveLocally({
-      "_new note": {
-        content: "",
-      },
-  });
-  location.reload();
+  // Reset to a new local note
+  activeNote.title = "_new note";
+  activeNote.isCollaborative = false;
+  activeNote.noteId = null;
+  activeNote.lockedTitle = false;
+  hasAutoTitle = false;
+
+  if (currentCollaborativeNote) {
+    currentCollaborativeNote.destroy();
+  }
+
+  textarea.value = "";
+  textarea.focus();
+
+  // Re-enable auto-save
+  textarea.removeEventListener("keyup", debouncedSave);
+  textarea.addEventListener("keyup", debouncedSave);
+
+  updateShareButton();
+  renderSidebar(notes);
 };
 
 let textareaVisible = true;
@@ -516,9 +541,9 @@ export const applyAiEdit = async () => {
   }
 };
 
-export const generateAiTitle = async () => {
+export const generateAiSummary = async () => {
   if (hasAutoTitle) return;
-  if (activeNote.isCollaborative) return;
+  // if (activeNote.isCollaborative) return; // Allow for collaborative notes
 
   const content = textarea.value.trim();
   if (!content) return;
@@ -534,9 +559,14 @@ export const generateAiTitle = async () => {
     }
 
     hasAutoTitle = true;
-    renameActiveNote(result.trim());
+
+    if (activeNote.isCollaborative && activeNote.noteId) {
+      updateCollaborativeNoteTitle(activeNote.noteId, result.trim());
+    } else {
+      renameActiveNote(result.trim());
+    }
   } catch (error) {
-    console.error("AI title error:", error);
+    console.error("AI summary error:", error);
   }
 };
 
@@ -585,7 +615,7 @@ if (textarea) {
       activeNote.lockedTitle ||
       (currentNoteData && currentNoteData.lockedTitle);
     if (!isLocked && !hasAutoTitle && textarea.value.trim().length > 40) {
-      generateAiTitle();
+      generateAiSummary();
     }
   });
 }
@@ -593,6 +623,11 @@ if (textarea) {
 // Export globals for HTML
 (window as any).applyAiEdit = applyAiEdit;
 (window as any).hideAiToolbar = hideAiToolbar;
-(window as any).generateAiTitle = generateAiTitle;
+(window as any).generateAiSummary = generateAiSummary;
 (window as any).createNewCollaborativeNote = createNewCollaborativeNoteUI;
 (window as any).shareCurrentNote = shareCurrentNote;
+
+// Attach event listeners after functions are defined
+if (newCollabBtn) {
+  newCollabBtn.addEventListener("click", createNewCollaborativeNoteUI);
+}

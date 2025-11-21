@@ -8,7 +8,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+// Use 4000 by default to match Vite proxy and frontend WebSocket URL.
+const PORT = process.env.PORT || 4000;
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
@@ -22,7 +23,11 @@ const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 app.use(cors());
 app.use(express.json());
 
-const buildEditPrompt = (selection: string, instructions: string, context: string) => {
+const buildEditPrompt = (
+  selection: string,
+  instructions: string,
+  context: string
+) => {
   return `
 You are an assistant that rewrites text selections exactly as requested.
 Keep the output concise and return only the rewritten text with no explanations.
@@ -39,8 +44,10 @@ ${selection}
 
 const buildSummaryPrompt = (content: string) => {
   return `
-Read the following note content and return a concise, human-friendly title (max 60 characters).
-Do not add quotes or punctuation at the ends. Title-case the result if appropriate.
+Read the following note content and return a VERY short summary (MAXIMUM 4-5 words).
+This summary will be used as a sidebar title, so it must be concise.
+Do not use quotes or punctuation.
+Examples: "Meeting with team", "Grocery list", "Project Alpha Plan".
 
 Content:
 ${content}
@@ -58,8 +65,15 @@ app.post("/api/ai", async (req: Request, res: Response): Promise<any> => {
       return res.status(400).json({ error: "Request type is required." });
     }
 
-    // Use Gemini 2.5 Flash model (latest recommended fast model)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    // Debugging: Log the key (masked) and model
+    console.log(
+      "Using API Key:",
+      apiKey ? apiKey.substring(0, 8) + "..." : "NONE"
+    );
+    console.log("Using Model: gemini-2.5-flash-lite");
+
+    // Use Gemini 2.5 Flash Lite (User Requested)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
     let aiPrompt = "";
 
     if (type === "edit") {
@@ -107,7 +121,8 @@ wss.on("connection", (ws: WebSocket) => {
   ws.on("message", (data: any) => {
     for (const client of wss.clients) {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(data);
+        // Ensure data is sent as string, not Buffer
+        client.send(data.toString());
       }
     }
   });

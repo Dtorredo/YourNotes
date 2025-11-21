@@ -1,5 +1,13 @@
-import { firebase } from './firebase';
-import { CollaborativeNote } from './collaboration';
+import { auth, database, googleProvider } from "./firebase";
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  setPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
+import { ref, onValue, set, update, get, child } from "firebase/database";
+import { CollaborativeNote } from "./collaboration";
 // Removing circular import from ui
 // We will pass necessary functions as callbacks or move shared logic to a utils file
 // or just duplicate simple helpers like getTitle if needed.
@@ -23,15 +31,17 @@ import { CollaborativeNote } from './collaboration';
 // No, store needs to update UI when data changes (firebase callbacks).
 // We can inject the render function into store?
 
-export let renderSidebarCallback: ((notes: any, collabNotes?: any) => void) | null = null;
+export let renderSidebarCallback:
+  | ((notes: any, collabNotes?: any) => void)
+  | null = null;
 export let renderNoteCallback: ((title: string) => void) | null = null;
 
 export const setRenderCallbacks = (
-    renderSidebar: (notes: any, collabNotes?: any) => void,
-    renderNote: (title: string) => void
+  renderSidebar: (notes: any, collabNotes?: any) => void,
+  renderNote: (title: string) => void
 ) => {
-    renderSidebarCallback = renderSidebar;
-    renderNoteCallback = renderNote;
+  renderSidebarCallback = renderSidebar;
+  renderNoteCallback = renderNote;
 };
 
 declare global {
@@ -45,7 +55,6 @@ declare global {
   }
 }
 
-export let database: any;
 export let currentUser: any = null;
 export let currentCollaborativeNote: any = null;
 export let notes: any = {};
@@ -57,10 +66,10 @@ export const emptyNotes = {
 };
 
 export const activeNote: any = {
-    title: Object.keys(emptyNotes)[0],
-    isCollaborative: false,
-    noteId: null,
-    lockedTitle: false,
+  title: Object.keys(emptyNotes)[0],
+  isCollaborative: false,
+  noteId: null,
+  lockedTitle: false,
 };
 
 // Generate unique ID for collaborative notes
@@ -70,44 +79,24 @@ export const generateNoteId = () => {
 window.generateNoteId = generateNoteId;
 
 /* initialize firebase */
-const firebaseConfig = {
-  apiKey: "AIzaSyBV-GHwBk1Bibx9xolT7IdvsQ8mjgO-fkU",
-  authDomain: "notes-uno.firebaseapp.com",
-  databaseURL: "https://notes-uno-default-rtdb.firebaseio.com",
-  projectId: "notes-uno",
-  storageBucket: "notes-uno.firebasestorage.app",
-  messagingSenderId: "1025777646528",
-  appId: "1:1025777646528:web:2f6bc79f92a5ca04256625",
-  measurementId: "G-G17GF41EWB",
-};
+// Firebase initialized in firebase.ts
 
-// Initialize if not already initialized
-if (firebase && !firebase.apps?.length && !window.firebase?.apps?.length) {
-    try {
-        firebase.initializeApp(firebaseConfig);
-    } catch (e) {
-        // Ignore if already initialized
-    }
-}
+// Initialize if not already initialized (handled in firebase.ts)
 console.log("store.ts loaded");
 
-const googleProvider = new firebase.auth.GoogleAuthProvider();
-googleProvider.setCustomParameters({
-  prompt: "select_account",
-});
+// googleProvider exported from firebase.ts
 
 // Set auth persistence to local
 try {
-  const auth = firebase.auth();
-  if (auth && typeof auth.setPersistence === "function") {
-    auth.setPersistence('local').catch((e: any) => console.warn("Persistence error", e));
-  }
+  setPersistence(auth, browserLocalPersistence).catch((e: any) =>
+    console.warn("Persistence error", e)
+  );
 } catch (e) {
   console.warn("Auth persistence not supported, continuing without it:", e);
 }
 
 /* Authenticate with Google */
-firebase.auth().onAuthStateChanged((user: any) => {
+onAuthStateChanged(auth, (user: any) => {
   currentUser = user || null;
   if (user) {
     initDatabase(user.uid);
@@ -125,7 +114,9 @@ const updateUserProfileUI = (user: any) => {
 
   const tryUpdate = () => {
     const profileContainer = document.getElementById("user-profile-floating");
-    const profilePic = document.getElementById("user-profile-pic") as HTMLImageElement;
+    const profilePic = document.getElementById(
+      "user-profile-pic"
+    ) as HTMLImageElement;
     const logoutBtn = document.getElementById("user-logout-btn");
     const nameEl = document.getElementById("user-name");
 
@@ -156,7 +147,7 @@ const updateUserProfileUI = (user: any) => {
       }
       nameEl.textContent = user.displayName || user.email || "Signed in";
       logoutBtn.style.display = "block";
-      logoutBtn.textContent = "🚪 Logout";
+      logoutBtn.innerHTML = '<img src="/assets/log-out.png" alt="Logout" />';
       logoutBtn.title = `Logout ${user.displayName || user.email}`;
       profileContainer.style.display = "flex";
     } else {
@@ -165,7 +156,7 @@ const updateUserProfileUI = (user: any) => {
       profileContainer.removeAttribute("data-initial");
       nameEl.textContent = "Not signed in";
       logoutBtn.style.display = "block";
-      logoutBtn.textContent = "🔐 Login";
+      logoutBtn.innerHTML = '<img src="/assets/login.png" alt="Login" />';
       logoutBtn.title = "Sign in with Google";
       profileContainer.removeAttribute("data-initial");
       profileContainer.style.display = "flex";
@@ -184,13 +175,12 @@ window.addEventListener("load", () => {
   }, 1000);
 });
 
-
 // Logout function (also handles login if not authenticated)
 export const logoutUser = async () => {
   if (!currentUser) {
     // Not logged in, trigger login
     try {
-      await firebase.auth().signInWithPopup(googleProvider);
+      await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Login error:", error);
       if (error.code !== "auth/popup-closed-by-user") {
@@ -202,7 +192,7 @@ export const logoutUser = async () => {
 
   // Logout
   try {
-    await firebase.auth().signOut();
+    await signOut(auth);
     currentUser = null;
     // Clear the textarea
     const textarea = document.querySelector("textarea");
@@ -218,7 +208,8 @@ export const logoutUser = async () => {
 };
 
 const initDatabase = (uid: string) => {
-  database = firebase.database().ref(`/${uid}`);
+  // database is already initialized in firebase.ts
+  // We don't need to store a ref to the user root, we can just use paths
   initNotes();
 };
 
@@ -247,18 +238,20 @@ const initNotes = () => {
       if (renderSidebarCallback) renderSidebarCallback(notes);
       saveLocally(notes);
       /* Syncs notes between devices as long as the title doesn't change */
-      if (notes[activeNote.title] && renderNoteCallback) renderNoteCallback(activeNote.title);
+      if (notes[activeNote.title] && renderNoteCallback)
+        renderNoteCallback(activeNote.title);
     });
   });
 };
 
 export const persist = (notesToPersist: any) => {
-  if (!database) return;
-  database.set({ notes: notesToPersist });
+  if (!currentUser) return;
+  const userNotesRef = ref(database, `/${currentUser.uid}/notes`);
+  set(userNotesRef, notesToPersist);
 };
 
 export const saveLocally = (notes: any) => {
-    localStorage.setItem("notes", JSON.stringify(notes));
+  localStorage.setItem("notes", JSON.stringify(notes));
 };
 
 // Expose global helpers so other scripts can call them safely
@@ -266,15 +259,19 @@ window.persist = persist;
 window.logoutUser = logoutUser;
 
 const getNotes = () => {
-  return database.once("value").then((snapshot: any) => {
-    if (snapshot.val()) return snapshot.val().notes;
+  if (!currentUser) return Promise.resolve({});
+  const userNotesRef = ref(database, `/${currentUser.uid}/notes`);
+  return get(userNotesRef).then((snapshot) => {
+    if (snapshot.exists()) return snapshot.val();
     else return {};
   });
 };
 
 const sync = (callback: any) => {
-  database.on("value", (snapshot: any) => {
-    if (snapshot.val()) callback(snapshot.val().notes);
+  if (!currentUser) return;
+  const userNotesRef = ref(database, `/${currentUser.uid}/notes`);
+  onValue(userNotesRef, (snapshot) => {
+    if (snapshot.exists()) callback(snapshot.val());
   });
 };
 
@@ -282,7 +279,10 @@ const sync = (callback: any) => {
 const collaborativeNotes = new Map();
 
 // Create or load a collaborative note
-export const loadCollaborativeNote = async (noteId: string, textarea: HTMLTextAreaElement) => {
+export const loadCollaborativeNote = async (
+  noteId: string,
+  textarea: HTMLTextAreaElement
+) => {
   if (!currentUser) {
     console.error("User not authenticated");
     return null;
@@ -300,11 +300,7 @@ export const loadCollaborativeNote = async (noteId: string, textarea: HTMLTextAr
   }
 
   // Create new collaborative note
-  const collabNote = new CollaborativeNote(
-    noteId,
-    firebase.database(),
-    currentUser
-  );
+  const collabNote = new CollaborativeNote(noteId, database, currentUser);
   await collabNote.init(textarea);
 
   collaborativeNotes.set(noteId, collabNote);
@@ -314,7 +310,10 @@ export const loadCollaborativeNote = async (noteId: string, textarea: HTMLTextAr
 };
 
 // Create a new collaborative note
-export const createCollaborativeNote = async (textarea: HTMLTextAreaElement, initialContent = "") => {
+export const createCollaborativeNote = async (
+  textarea: HTMLTextAreaElement,
+  initialContent = ""
+) => {
   const noteId = generateNoteId();
   const collabNote = await loadCollaborativeNote(noteId, textarea);
 
@@ -322,21 +321,20 @@ export const createCollaborativeNote = async (textarea: HTMLTextAreaElement, ini
     collabNote.setContent(initialContent);
   }
 
-  // Add to sidebar
-  addCollaborativeNoteToSidebar(
-    noteId,
-    getTitle(initialContent || "_new collaborative note")
-  );
+  // Add to sidebar with the shareable link as the title
+  const shareLink = window.getShareableLink
+    ? window.getShareableLink(noteId)
+    : `${window.location.origin}${window.location.pathname}?note=${noteId}`;
+
+  updateCollaborativeNoteTitle(noteId, shareLink);
 
   return noteId;
 };
 
-// Add collaborative note to sidebar
-const addCollaborativeNoteToSidebar = (noteId: string, title: string) => {
-  const noteRef = firebase
-    .database()
-    .ref(`collaborative-notes/${noteId}/metadata`);
-  noteRef.update({
+// Update collaborative note title/metadata
+export const updateCollaborativeNoteTitle = (noteId: string, title: string) => {
+  const noteRef = ref(database, `collaborative-notes/${noteId}/metadata`);
+  update(noteRef, {
     title: title,
     modified: Date.now(),
   });
@@ -346,10 +344,7 @@ const addCollaborativeNoteToSidebar = (noteId: string, title: string) => {
 export const getCollaborativeNotes = async () => {
   if (!currentUser) return {};
 
-  const snapshot = await firebase
-    .database()
-    .ref("collaborative-notes")
-    .once("value");
+  const snapshot = await get(ref(database, "collaborative-notes"));
   const allNotes = snapshot.val() || {};
   const userNotes: any = {};
 

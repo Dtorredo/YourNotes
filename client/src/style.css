@@ -1,6 +1,9 @@
 body {
+  display: flex;
+  height: 100vh;
   margin: 0;
-  padding: 25px 0 25px 25px;
+  padding: 25px;
+  box-sizing: border-box;
   background-color: #f1f3e0;
 }
 * {
@@ -13,19 +16,25 @@ body {
 a {
   text-decoration: none;
 }
-textarea {
+#container {
+  display: flex;
+  flex: 1;
   background-color: #f1f3e0;
+}
+textarea {
+  flex: 1;
+  background-color: transparent;
   padding-right: 25px;
-  float: left;
-  width: 80%;
-  height: 100%;
-  margin: 0;
+  border: none;
   resize: none;
+  outline: none;
+  font-family: "Droid Sans Mono", monospace;
+  font-size: 14px;
+  line-height: 2;
 }
 sidebar {
   display: flex;
   flex-direction: column;
-  float: left;
   width: 13%;
   min-width: 90px;
   height: calc(100vh - 50px);
@@ -50,6 +59,19 @@ list {
 
 toggle {
   display: none;
+}
+
+night {
+  display: block;
+  cursor: pointer;
+  font-size: 24px;
+  margin-top: 10px;
+  text-align: center;
+  user-select: none;
+}
+
+night:hover {
+  transform: scale(1.1);
 }
 
 /* Collaboration UI */
@@ -90,8 +112,11 @@ toggle {
 }
 
 #ai-edit-toggle.disabled {
-  opacity: 0.4;
-  cursor: default;
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+  background-color: #ccc;
+  box-shadow: none;
 }
 
 #ai-edit-toggle:hover {
@@ -144,8 +169,9 @@ toggle {
   width: 100%;
   display: block;
   box-sizing: border-box;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: center;
 }
 
@@ -235,15 +261,19 @@ sidebar div:hover {
 }
 
 #user-logout-btn {
-  background: rgba(47, 59, 36, 0.85);
+  background: none;
   border: none;
-  font-size: 12px;
   cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  color: #f1f3e0;
-  white-space: nowrap;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#user-logout-btn img {
+  width: 24px;
+  height: 24px;
+  display: block;
 }
 
 #user-logout-btn:hover {
@@ -252,17 +282,11 @@ sidebar div:hover {
 
 /* AI Selection Toolbar */
 #ai-selection-toolbar {
-  position: fixed;
-  right: 280px;
-  bottom: 30px;
   display: flex;
-  gap: 8px;
-  background: white;
-  border-radius: 12px;
-  padding: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   align-items: center;
-  z-index: 1100;
+  gap: 8px;
+  margin-right: 10px;
+  transition: opacity 0.2s, transform 0.2s;
 }
 
 #ai-selection-toolbar.hidden {
@@ -270,28 +294,34 @@ sidebar div:hover {
 }
 
 #ai-selection-prompt {
-  flex: 1;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
   border: 1px solid rgba(47, 59, 36, 0.3);
   background: #f9f9f1;
-  min-width: 220px;
+  width: 200px;
+  font-size: 14px;
+  outline: none;
 }
 
-#ai-selection-toolbar button {
+#ai-submit-btn {
   background-color: #4ecdc4;
   color: #2f3b24;
   border: none;
-  padding: 6px 10px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   cursor: pointer;
-  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  padding: 0;
+  transition: background-color 0.2s;
 }
 
-#ai-selection-toolbar button:last-child {
-  background-color: transparent;
-  color: #ff6b6b;
-  border: 1px solid #ff6b6b;
+#ai-submit-btn:hover {
+  background-color: #45b7d1;
+  color: white;
 }
 
 @media (max-width: 800px) {

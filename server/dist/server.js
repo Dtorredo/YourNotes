@@ -44,7 +44,8 @@ const ws_1 = __importStar(require("ws"));
 const generative_ai_1 = require("@google/generative-ai");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-const PORT = process.env.PORT || 5001;
+// Use 4000 by default to match Vite proxy and frontend WebSocket URL.
+const PORT = process.env.PORT || 4000;
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
     console.warn("⚠️  GEMINI_API_KEY is not set. AI endpoints will return errors until you configure it.");
@@ -68,8 +69,10 @@ ${selection}
 };
 const buildSummaryPrompt = (content) => {
     return `
-Read the following note content and return a concise, human-friendly title (max 60 characters).
-Do not add quotes or punctuation at the ends. Title-case the result if appropriate.
+Read the following note content and return a VERY short summary (MAXIMUM 4-5 words).
+This summary will be used as a sidebar title, so it must be concise.
+Do not use quotes or punctuation.
+Examples: "Meeting with team", "Grocery list", "Project Alpha Plan".
 
 Content:
 ${content}
@@ -84,8 +87,11 @@ app.post("/api/ai", async (req, res) => {
         if (!type) {
             return res.status(400).json({ error: "Request type is required." });
         }
-        // Use Gemini 2.5 Flash model (latest recommended fast model)
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // Debugging: Log the key (masked) and model
+        console.log("Using API Key:", apiKey ? apiKey.substring(0, 8) + "..." : "NONE");
+        console.log("Using Model: gemini-2.5-flash-lite");
+        // Use Gemini 2.5 Flash Lite (User Requested)
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
         let aiPrompt = "";
         if (type === "edit") {
             if (!selection) {
@@ -126,7 +132,8 @@ wss.on("connection", (ws) => {
     ws.on("message", (data) => {
         for (const client of wss.clients) {
             if (client !== ws && client.readyState === ws_1.default.OPEN) {
-                client.send(data);
+                // Ensure data is sent as string, not Buffer
+                client.send(data.toString());
             }
         }
     });
