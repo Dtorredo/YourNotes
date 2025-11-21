@@ -1,0 +1,17 @@
+
+> yournote@1.0.0 dev
+> concurrently "npm run server:dev" "npm run client:dev"
+
+[1]
+[1] > yournote@1.0.0 client:dev
+[1] > vite client
+[1]
+[0]
+[0] > yournote@1.0.0 server:dev
+[0] > ts-node server/src/server.ts
+[0]
+[1]
+[1]   VITE v6.4.1  ready in 221 ms
+[1]
+[1]   ➜  Local:   http://localhost:3001/
+[1]   ➜  Network: use --host to expose

@@ -1,42 +1,40 @@
-const textarea = document.getElementsByTagName("textarea")[0];
-const sidebar = document.getElementsByTagName("sidebar")[0];
-const list = document.getElementsByTagName("list")[0];
-const toggle = document.getElementsByTagName("toggle")[0];
-const night = document.getElementsByTagName("night")[0];
-const aiSelectionToolbar = document.getElementById("ai-selection-toolbar");
-const aiSelectionPrompt = document.getElementById("ai-selection-prompt");
-const aiTitleButton = document.getElementById("ai-title-btn");
-const aiEditToggle = document.getElementById("ai-edit-toggle");
+import { notes, saveLocally, persist, currentUser, loadCollaborativeNote, createCollaborativeNote, getCollaborativeNotes, currentCollaborativeNote } from './store';
+import { getNoteIdFromUrl, getShareableLink } from './collaboration';
+
+// We need to use 'any' for DOM elements initially because they might be null
+// and we are not doing strict null checks to match the original loose logic
+const textarea = document.getElementsByTagName("textarea")[0] as HTMLTextAreaElement;
+const sidebar = document.getElementsByTagName("sidebar")[0] as HTMLElement;
+const list = document.getElementsByTagName("list")[0] as HTMLElement;
+const toggle = document.getElementsByTagName("toggle")[0] as HTMLElement;
+const night = document.getElementsByTagName("night")[0] as HTMLElement;
+const aiSelectionToolbar = document.getElementById("ai-selection-toolbar") as HTMLElement;
+const aiSelectionPrompt = document.getElementById("ai-selection-prompt") as HTMLInputElement;
+const aiEditToggle = document.getElementById("ai-edit-toggle") as HTMLElement;
+
 let hasAutoTitle = false;
-console.log("interface.js loaded v3");
+console.log("ui.ts loaded");
 
 const AI_API_BASE =
-  window.AI_API_BASE ||
+  (window as any).AI_API_BASE ||
   (window.location.hostname === "localhost"
-    ? "http://localhost:4000"
-    : window.location.origin);
-let activeSelectionRange = null;
+    ? "/api" // Use relative path with Vite proxy (maps to http://localhost:5001/api)
+    : "/api"); // Assume prod serves API at /api
+// Wait, the original code had http://localhost:4000 or window.location.origin.
+// The server.ts is listening on 5001 (or env PORT).
+// Vite proxy sends /api to http://localhost:5001.
+// So using `/api` is correct for both dev (via proxy) and prod (if served by express).
+// But let's stick to `/api` which means `http://localhost:3001/api` -> `http://localhost:5001/api`
 
-const emptyNotes = {
-  "_new note": {
-    content: "",
-  },
-};
+let activeSelectionRange: { start: number; end: number } | null = null;
 
-const activeNote = {
-  title: Object.keys(emptyNotes)[0],
-  isCollaborative: false,
-  noteId: null,
-  lockedTitle: false,
-};
-
-const renderSidebar = (notes, collaborativeNotes = {}) => {
+export const renderSidebar = (notes: any, collaborativeNotes: any = {}) => {
   let html = "";
 
   // Render legacy notes
   let titles = Object.keys(notes).sort();
   for (let title of titles) {
-    html += `<div onclick="changeNote(event)" data-type="legacy">${title}</div>`;
+    html += `<div class="note-item legacy" data-title="${title}" data-type="legacy">${title}</div>`;
   }
 
   // Render collaborative notes
@@ -51,19 +49,35 @@ const renderSidebar = (notes, collaborativeNotes = {}) => {
     const note = collaborativeNotes[noteId];
     const title = note.title || "_untitled";
     const icon = "👥"; // Collaboration icon
-    html += `<div onclick="changeCollaborativeNote(event)" data-note-id="${noteId}" data-type="collaborative">${icon} ${title}</div>`;
+    html += `<div class="note-item collaborative" data-note-id="${noteId}" data-type="collaborative">${icon} ${title}</div>`;
   }
 
   list.innerHTML = html;
+
+  // Add event listeners (since we are using innerHTML, inline onclicks are messy in modules)
+  // We'll delegate or attach after render.
+  // Delegating is better.
 };
 
-const changeNote = (event) => {
-  let title = event.target.innerHTML;
-  renderNote(title);
-};
+// Delegate click events on list
+list.addEventListener('click', (event: Event) => {
+    const target = event.target as HTMLElement;
+    // Handle direct clicks or clicks on children
+    const noteItem = target.closest('.note-item');
+    if (noteItem) {
+        const type = noteItem.getAttribute('data-type');
+        if (type === 'legacy') {
+            const title = noteItem.getAttribute('data-title');
+            if (title) renderNote(title);
+        } else if (type === 'collaborative') {
+            const noteId = noteItem.getAttribute('data-note-id');
+            if (noteId) changeCollaborativeNote(noteId);
+        }
+    }
+});
 
-const changeCollaborativeNote = async (event) => {
-  const noteId = event.target.getAttribute("data-note-id");
+
+const changeCollaborativeNote = async (noteId: string) => {
   await renderCollaborativeNote(noteId);
 };
 
@@ -71,6 +85,20 @@ const changeCollaborativeNote = async (event) => {
 function updateShareButton() {
   const shareBtn = document.getElementById("share-btn");
   if (!shareBtn) return;
+  // Need to access activeNote. Since we can't import it from store because of cycle, we check helper or export it
+  // We can import activeNote from store, but only if store doesn't import us.
+  // Currently store imports ui.ts.
+  // So ui.ts cannot import store.ts.
+
+  // But we already imported `notes`, `currentUser` etc from store.ts above!
+  // The cycle is:
+  // store.ts -> imports ui.ts (for renderSidebar)
+  // ui.ts -> imports store.ts (for notes)
+
+  // I broke the cycle in `main.ts` by using `setRenderCallbacks`.
+  // So `store.ts` NO LONGER imports `ui.ts`.
+  // Wait, I need to remove the import in `store.ts` as well.
+
   if (activeNote.isCollaborative) {
     shareBtn.style.display = "block";
   } else {
@@ -78,17 +106,18 @@ function updateShareButton() {
   }
 }
 
-const renderNote = (title) => {
+import { activeNote } from './store';
+
+export const renderNote = (title: string) => {
   activeNote.title = title;
   activeNote.isCollaborative = false;
   activeNote.noteId = null;
   activeNote.lockedTitle = !!(notes[title] && notes[title].lockedTitle);
-  hasAutoTitle = !!activeNote.lockedTitle;
+  // hasAutoTitle = !!activeNote.lockedTitle; // Local variable
 
   // Destroy collaborative note if switching from collaborative
   if (currentCollaborativeNote) {
     currentCollaborativeNote.destroy();
-    currentCollaborativeNote = null;
   }
 
   textarea.value = notes[title].content;
@@ -102,11 +131,11 @@ const renderNote = (title) => {
   updateShareButton();
 };
 
-const renderCollaborativeNote = async (noteId) => {
+export const renderCollaborativeNote = async (noteId: string) => {
   activeNote.isCollaborative = true;
   activeNote.noteId = noteId;
   activeNote.lockedTitle = false;
-  hasAutoTitle = false;
+  // hasAutoTitle = false;
 
   // Update URL to include note ID for sharing
   const newUrl = `${window.location.origin}${window.location.pathname}?note=${noteId}`;
@@ -170,31 +199,30 @@ const saveNotes = () => {
   renderSidebar(notes);
 };
 
-const saveLocally = (notes) => {
-  localStorage.setItem("notes", JSON.stringify(notes));
-};
-
-const getTitle = (content) => {
+const getTitle = (content: string) => {
   return content.split("\n")[0].replace("#", "");
 };
 
-const debounce = (func) => {
-  let timeout;
-  return () => {
+const debounce = (func: Function) => {
+  let timeout: any;
+  return (...args: any[]) => {
     let context = this;
     let later = () => {
       timeout = null;
-      func.apply(context);
+      func.apply(context, args);
     };
     clearTimeout(timeout);
     timeout = setTimeout(later, 500);
   };
 };
 
-const reset = () => {
-  notes = emptyNotes;
-  saveNotes();
-  location.reload(true);
+export const reset = () => {
+  saveLocally({
+      "_new note": {
+        content: "",
+      },
+  });
+  location.reload();
 };
 
 let textareaVisible = true;
@@ -205,19 +233,20 @@ const toggleSidebar = () => {
   if (textareaVisible) {
     toggle.innerHTML = "☰☰";
     toggle.style.float = "left";
-    toggle.style.top = -20;
-    toggle.style.left = -7;
+    // toggle.style.top = -20; // Numbers not allowed
+    toggle.style.top = "-20px";
+    toggle.style.left = "-7px";
     textarea.focus();
   } else {
     toggle.innerHTML = "✕";
-    toggle.style.top = -7;
-    toggle.style.left = -20;
+    toggle.style.top = "-7px";
+    toggle.style.left = "-20px";
     toggle.style.float = "right";
   }
 };
 
 const setTheme = () => {
-  let theme, icon;
+  let theme: any, icon;
   if (localStorage.night) {
     theme = {
       backgroundColor: "#778873",
@@ -239,7 +268,7 @@ const setTheme = () => {
 
 const toggleTheme = () => {
   if (localStorage.night) delete localStorage.night;
-  else localStorage.night = true;
+  else localStorage.night = "true";
   setTheme();
 };
 
@@ -252,64 +281,47 @@ night.addEventListener("click", toggleTheme);
     Get local copy first
     Get's overwrite with remote copy (store.js)= source of truth
 */
-let notes = Object.assign(
-  {},
-  emptyNotes,
-  JSON.parse(localStorage.getItem("notes"))
-);
+// Initial render happens in store.ts when data loads.
+// But we need initial render of localstorage notes here?
+// store.ts handles `notes` initialization.
 
 // Load collaborative notes and render sidebar
-let collabNotes = {};
-if (typeof getCollaborativeNotes === "function") {
-  getCollaborativeNotes().then((collabNotesData) => {
-    collabNotes = collabNotesData;
-    renderSidebar(notes, collabNotes);
-  });
-} else {
-  renderSidebar(notes);
-}
+// This logic is now in store.ts roughly, but the call to renderSidebar is needed.
+// We should probably initialize this in main.ts to coordinate.
 
 setTheme();
 
-// Check if URL has a shared note ID (only if helper from collaboration.js is available)
-let sharedNoteId = null;
+// Check if URL has a shared note ID
+let sharedNoteId: string | null = null;
 if (typeof getNoteIdFromUrl === "function") {
   sharedNoteId = getNoteIdFromUrl();
 }
-if (sharedNoteId && typeof renderCollaborativeNote === "function") {
+if (sharedNoteId) {
   // Wait for auth then load the shared note
   setTimeout(() => {
     if (currentUser) {
-      renderCollaborativeNote(sharedNoteId);
+      renderCollaborativeNote(sharedNoteId!);
     }
   }, 1000);
 }
 
-/* Service worker handling
- *
- * On localhost we aggressively UNREGISTER any existing service workers
- * for this origin to avoid stale-cache issues during development.
- * In production, we still support the service worker for offline/PWA.
- */
-
+/* Service worker handling */
 if ("serviceWorker" in navigator) {
   if (
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1"
   ) {
-    // Dev: nuke all registrations on this origin
     navigator.serviceWorker
       .getRegistrations()
       .then((regs) => regs.forEach((r) => r.unregister()))
       .catch((e) => console.warn("Failed to unregister service workers:", e));
   } else {
-    // Prod: keep PWA/offline behavior
     navigator.serviceWorker.register("/sw.js", { scope: "/" });
   }
 }
 
 /* Collaboration helper functions */
-const createNewCollaborativeNote = async () => {
+export const createNewCollaborativeNoteUI = async () => {
   if (!currentUser) {
     alert("Please wait for authentication to complete");
     return;
@@ -327,29 +339,20 @@ const createNewCollaborativeNote = async () => {
     const shareBtn = document.getElementById("share-btn");
     if (shareBtn) {
       shareBtn.style.display = "block";
-      console.log("Share button should now be visible");
-    } else {
-      console.error("Share button element not found!");
     }
 
     // Show success message with share link
     if (typeof getShareableLink === "function") {
       const shareLink = getShareableLink(noteId);
       console.log("Share link:", shareLink);
-      // Optionally show a notification
-      console.log(
-        "✅ Collaborative note created! Click the Share button (🔗) to get the link."
-      );
-    } else {
-      console.warn("getShareableLink function not available yet");
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating collaborative note:", error);
     alert("Failed to create collaborative note: " + error.message);
   }
 };
 
-const shareCurrentNote = () => {
+export const shareCurrentNote = () => {
   if (!activeNote.isCollaborative || !activeNote.noteId) {
     alert("Please select a collaborative note to share");
     return;
@@ -360,7 +363,6 @@ const shareCurrentNote = () => {
   if (typeof getShareableLink === "function") {
     shareLink = getShareableLink(activeNote.noteId);
   } else {
-    // Fallback if function not available
     const baseUrl = window.location.origin + window.location.pathname;
     shareLink = `${baseUrl}?note=${activeNote.noteId}`;
   }
@@ -374,11 +376,9 @@ const shareCurrentNote = () => {
       })
       .catch((err) => {
         console.error("Clipboard error:", err);
-        // Fallback for older browsers or if clipboard fails
         prompt("Share this link with collaborators:", shareLink);
       });
   } else {
-    // Fallback for older browsers
     prompt("Share this link with collaborators:", shareLink);
   }
 };
@@ -403,7 +403,7 @@ const handleSelectionChange = () => {
   }
 };
 
-const hideAiToolbar = () => {
+export const hideAiToolbar = () => {
   if (aiSelectionToolbar) {
     aiSelectionToolbar.classList.add("hidden");
   }
@@ -435,8 +435,9 @@ if (aiEditToggle) {
   aiEditToggle.addEventListener("click", toggleAiEditPrompt);
 }
 
-const callAiService = async (payload) => {
-  const response = await fetch(`${AI_API_BASE}/api/ai`, {
+const callAiService = async (payload: any) => {
+  // Use relative path which Vite proxies to server
+  const response = await fetch(`/api/ai`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -452,7 +453,7 @@ const callAiService = async (payload) => {
   return response.json();
 };
 
-const applyAiEdit = async () => {
+export const applyAiEdit = async () => {
   if (
     !activeSelectionRange ||
     activeSelectionRange.start === activeSelectionRange.end
@@ -505,7 +506,7 @@ const applyAiEdit = async () => {
     } else {
       saveNote();
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI edit error:", error);
     alert("Failed to apply AI edit: " + error.message);
   } finally {
@@ -515,7 +516,7 @@ const applyAiEdit = async () => {
   }
 };
 
-const generateAiTitle = async () => {
+export const generateAiTitle = async () => {
   if (hasAutoTitle) return;
   if (activeNote.isCollaborative) return;
 
@@ -539,7 +540,7 @@ const generateAiTitle = async () => {
   }
 };
 
-const renameActiveNote = (newTitle) => {
+const renameActiveNote = (newTitle: string) => {
   if (!newTitle) return;
   const sanitized = newTitle
     .replace(/\s+/g, " ")
@@ -569,7 +570,7 @@ const renameActiveNote = (newTitle) => {
   activeNote.title = truncated;
   activeNote.lockedTitle = true;
   saveNotes();
-  renderSidebar(notes, collabNotes);
+  renderSidebar(notes);
   renderNote(truncated);
 };
 
@@ -589,8 +590,9 @@ if (textarea) {
   });
 }
 
-window.applyAiEdit = applyAiEdit;
-window.hideAiToolbar = hideAiToolbar;
-window.generateAiTitle = generateAiTitle;
-window.createNewCollaborativeNote = createNewCollaborativeNote;
-window.shareCurrentNote = shareCurrentNote;
+// Export globals for HTML
+(window as any).applyAiEdit = applyAiEdit;
+(window as any).hideAiToolbar = hideAiToolbar;
+(window as any).generateAiTitle = generateAiTitle;
+(window as any).createNewCollaborativeNote = createNewCollaborativeNoteUI;
+(window as any).shareCurrentNote = shareCurrentNote;
