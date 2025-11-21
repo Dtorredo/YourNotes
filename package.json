@@ -1,20 +1,32 @@
 {
   "name": "yournote",
-  "main": "app.js",
+  "version": "1.0.0",
   "scripts": {
-    "start": "serve -p 3001",
-    "server": "node server/server.js",
-    "dev": "concurrently \"npm run start\" \"npm run server\""
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "client:dev": "vite client",
+    "server:dev": "ts-node server/src/server.ts",
+    "build": "npm run client:build && npm run server:build",
+    "client:build": "vite build client",
+    "server:build": "tsc -p server/tsconfig.json",
+    "start": "node server/dist/server.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.5.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "serve": "2.0.0",
-    "ws": "^8.18.0"
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "firebase": "^11.2.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^8.2.2",
+    "rimraf": "^6.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vite": "^6.1.0"
   }
 }

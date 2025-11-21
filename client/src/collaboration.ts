@@ -1,12 +1,13 @@
-// Collaborative editing with a simple WebSocket-based sync backend
+import { database } from './store';
 
-// Generate unique ID for notes
-const generateNoteId = () => {
-  return "note_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-};
+export class CollaborativeNote {
+  noteId: string;
+  firebaseDatabase: any;
+  currentUser: any;
+  content: string;
+  ws: WebSocket | null;
 
-class CollaborativeNote {
-  constructor(noteId, firebaseDatabase, currentUser) {
+  constructor(noteId: string, firebaseDatabase: any, currentUser: any) {
     this.noteId = noteId;
     this.firebaseDatabase = firebaseDatabase; // kept for metadata/share helpers
     this.currentUser = currentUser;
@@ -15,7 +16,7 @@ class CollaborativeNote {
   }
 
   // Initialize simple collaborative note and WebSocket connection
-  async init(textarea) {
+  async init(textarea: HTMLTextAreaElement) {
     let isLocalChange = false;
     const refreshTextarea = () => {
       if (isLocalChange) return;
@@ -43,10 +44,18 @@ class CollaborativeNote {
     });
 
     // WebSocket connection to Node backend
-    this.ws = new WebSocket("ws://localhost:5001");
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // Use port 4000 for dev (as per .env), or same host for prod
+    // In a real setup, this should be an env var
+    const wsUrl = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+        ? "ws://localhost:4000"
+        : `${protocol}//${window.location.host}`;
+
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      this.ws.send(
+      this.ws?.send(
         JSON.stringify({
           type: "join",
           noteId: this.noteId,
@@ -74,7 +83,7 @@ class CollaborativeNote {
   }
 
   // helper for initial content (used by store.js)
-  setContent(content) {
+  setContent(content: string) {
     this.content = content || "";
   }
 
@@ -87,14 +96,8 @@ class CollaborativeNote {
   }
 }
 
-// Expose globals so existing non-module scripts (store.js, interface.js) can use them
-if (typeof window !== "undefined") {
-  window.CollaborativeNote = CollaborativeNote;
-  window.generateNoteId = generateNoteId;
-}
-
 // Share a note with other users
-const shareNote = async (noteId, userEmail, permission = "write") => {
+export const shareNote = async (noteId: string, userEmail: string, permission = "write") => {
   const noteRef = database.ref(
     `collaborative-notes/${noteId}/metadata/collaborators`
   );
@@ -113,13 +116,17 @@ const shareNote = async (noteId, userEmail, permission = "write") => {
 };
 
 // Get shareable link for a note
-const getShareableLink = (noteId) => {
+export const getShareableLink = (noteId: string) => {
   const baseUrl = window.location.origin + window.location.pathname;
   return `${baseUrl}?note=${noteId}`;
 };
 
 // Load note from URL parameter
-const getNoteIdFromUrl = () => {
+export const getNoteIdFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
   return params.get("note");
 };
+
+// Expose globally for other scripts if needed
+window.getNoteIdFromUrl = getNoteIdFromUrl;
+window.getShareableLink = getShareableLink;
