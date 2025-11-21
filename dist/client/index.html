@@ -1,46 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <title>YourNote</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="icon.png">
-    <link rel="manifest" href="/manifest.webmanifest">
-    <meta name="theme-color" content="#EFEFEF">
-    <link href="https://fonts.googleapis.com/css?family=Droid+Sans+Mono" rel="stylesheet">
-    <!-- Firebase v3 (Legacy) - Keeping script tag as moving to module is a breaking change for logic -->
-    <script src="https://www.gstatic.com/firebasejs/3.6.4/firebase.js"></script>
-  <script type="module" crossorigin src="/assets/index-C3J-_RmY.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Bug4sbGA.css">
-</head>
-<body>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#EFEFEF" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Droid+Sans+Mono"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/assets/index-cuf7tWDx.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DLKf6HSj.css">
+  </head>
+  <body>
     <toggle>☰☰</toggle>
     <sidebar>
-        <list></list>
-        <night>🌚</night>
-        <reload style="opacity: 0" onclick="location.reload(true)">💀</reload>
-        <button id="new-collab-btn" onclick="window.createNewCollaborativeNote()">➕ New Collaborative Note</button>
-        <div id="user-profile-floating">
-            <img id="user-profile-pic" src="" alt="Profile">
-            <div id="user-name">Not signed in</div>
-            <button id="user-logout-btn" onclick="window.logoutUser()">🔐 Login</button>
-        </div>
+      <button id="new-collab-btn">➕ New Collaborative Note</button>
+
+      <list></list>
+      <night>🌚</night>
+      <reload style="opacity: 0" onclick="location.reload(true)">💀</reload>
+      <div id="user-profile-floating">
+        <img id="user-profile-pic" src="" alt="Profile" />
+        <div id="user-name">Not signed in</div>
+        <button id="user-logout-btn" onclick="window.logoutUser()">
+          🔐 Login
+        </button>
+      </div>
     </sidebar>
-    <textarea autofocus placeholder="start typing"></textarea>
+    <div id="container">
+      <textarea></textarea>
+    </div>
 
     <!-- Collaboration UI -->
     <div id="collaborators-container">
-        <div id="collaborators-list"></div>
-        <button id="share-btn" onclick="window.shareCurrentNote()" style="display: none;">🔗 Share</button>
-        <button id="ai-edit-toggle" title="AI Edit">✨</button>
+      <div id="collaborators-list"></div>
+      <button
+        id="share-btn"
+        onclick="window.shareCurrentNote()"
+        style="display: none"
+      >
+        🔗 Share
+      </button>
+      <div id="ai-selection-toolbar" class="hidden">
+        <input
+          type="text"
+          id="ai-selection-prompt"
+          placeholder="Describe change..."
+        />
+        <button id="ai-submit-btn" onclick="window.applyAiEdit()">➤</button>
+      </div>
+      <button id="ai-edit-toggle" title="AI Edit">✨</button>
     </div>
 
-    <!-- AI Selection Toolbar -->
-    <div id="ai-selection-toolbar" class="hidden">
-        <input type="text" id="ai-selection-prompt" placeholder="Describe how to transform the selection">
-        <button onclick="window.applyAiEdit()">✨ Apply AI Edit</button>
-        <button onclick="window.hideAiToolbar()">✖</button>
-    </div>
-
-</body>
+  </body>
 </html>

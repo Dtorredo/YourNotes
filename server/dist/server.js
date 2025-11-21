@@ -42,6 +42,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = __importStar(require("ws"));
 const generative_ai_1 = require("@google/generative-ai");
+const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 // Use 4000 by default to match Vite proxy and frontend WebSocket URL.
@@ -53,6 +54,9 @@ if (!apiKey) {
 const genAI = apiKey ? new generative_ai_1.GoogleGenerativeAI(apiKey) : null;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+// Serve static files from the built client
+const clientDistPath = path_1.default.join(__dirname, "../../dist/client");
+app.use(express_1.default.static(clientDistPath));
 const buildEditPrompt = (selection, instructions, context) => {
     return `
 You are an assistant that rewrites text selections exactly as requested.
@@ -124,18 +128,50 @@ app.post("/api/ai", async (req, res) => {
         res.status(500).json({ error: error.message || "AI request failed." });
     }
 });
+// Catch-all route to serve index.html for client-side routing
+app.get("*", (req, res) => {
+    res.sendFile(path_1.default.join(clientDistPath, "index.html"));
+});
 // HTTP server shared by Express and WebSocket
 const server = http_1.default.createServer(app);
 const wss = new ws_1.WebSocketServer({ server });
-// Simple broadcast relay: any collab update from one client goes to all others.
-wss.on("connection", (ws) => {
+// Room management
+const rooms = new Map();
+wss.on("connection", (ws, req) => {
+    // Extract noteId from URL parameters
+    // Expected URL: ws://localhost:4000/noteId
+    // or ws://localhost:4000?note=noteId
+    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const noteId = url.searchParams.get("note") || url.pathname.replace("/", "");
+    if (!noteId) {
+        ws.close();
+        return;
+    }
+    console.log(`Client connected to room: ${noteId}`);
+    if (!rooms.has(noteId)) {
+        rooms.set(noteId, new Set());
+    }
+    rooms.get(noteId)?.add(ws);
     ws.on("message", (data) => {
-        for (const client of wss.clients) {
-            if (client !== ws && client.readyState === ws_1.default.OPEN) {
-                // Ensure data is sent as string, not Buffer
-                client.send(data.toString());
+        // Broadcast to all other clients in the SAME room
+        const room = rooms.get(noteId);
+        if (room) {
+            for (const client of room) {
+                if (client !== ws && client.readyState === ws_1.default.OPEN) {
+                    client.send(data);
+                }
             }
         }
+    });
+    ws.on("close", () => {
+        const room = rooms.get(noteId);
+        if (room) {
+            room.delete(ws);
+            if (room.size === 0) {
+                rooms.delete(noteId);
+            }
+        }
+        console.log(`Client disconnected from room: ${noteId}`);
     });
 });
 server.listen(PORT, () => {

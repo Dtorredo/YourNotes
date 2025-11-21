@@ -199,6 +199,8 @@ export const logoutUser = async () => {
     if (textarea) {
       textarea.value = "";
     }
+    // Clear local notes for the logged-out user
+    notes = Object.assign({}, emptyNotes);
     // Reload to reset state
     window.location.reload();
   } catch (error: any) {
@@ -215,14 +217,25 @@ const initDatabase = (uid: string) => {
 
 const mergeNotes = (currentNotes: any, data: any) => {
   let newNotes = Object.assign({}, emptyNotes);
-  let keys = Object.keys(data);
-  for (let i = 0; i < keys.length; i++) {
-    let title = keys[i];
-    if (!currentNotes[title]) newNotes[title] = data[title];
-    else if (currentNotes[title].modified > data[title].modified)
+  // Union of keys from both current (local) and data (remote)
+  let keys = new Set([...Object.keys(currentNotes), ...Object.keys(data)]);
+
+  keys.forEach((title) => {
+    if (!data[title]) {
+      // Exists locally but not on server (yet) -> Keep local
       newNotes[title] = currentNotes[title];
-    else newNotes[title] = data[title];
-  }
+    } else if (!currentNotes[title]) {
+      // Exists on server but not locally -> Take server
+      newNotes[title] = data[title];
+    } else {
+      // Conflict: take the one with the newer timestamp
+      if (currentNotes[title].modified > data[title].modified) {
+        newNotes[title] = currentNotes[title];
+      } else {
+        newNotes[title] = data[title];
+      }
+    }
+  });
   return newNotes;
 };
 
@@ -250,8 +263,10 @@ export const persist = (notesToPersist: any) => {
   set(userNotesRef, notesToPersist);
 };
 
-export const saveLocally = (notes: any) => {
-  localStorage.setItem("notes", JSON.stringify(notes));
+export const saveLocally = (data: any) => {
+  if (!currentUser) return;
+  const storageKey = `notes_${currentUser.uid}`;
+  localStorage.setItem(storageKey, JSON.stringify(data));
 };
 
 // Expose global helpers so other scripts can call them safely
@@ -326,18 +341,37 @@ export const createCollaborativeNote = async (
     ? window.getShareableLink(noteId)
     : `${window.location.origin}${window.location.pathname}?note=${noteId}`;
 
-  updateCollaborativeNoteTitle(noteId, shareLink);
+  await updateCollaborativeNoteTitle(noteId, shareLink);
 
   return noteId;
 };
 
 // Update collaborative note title/metadata
-export const updateCollaborativeNoteTitle = (noteId: string, title: string) => {
+export const updateCollaborativeNoteTitle = async (
+  noteId: string,
+  title: string
+) => {
+  if (!currentUser) return;
   const noteRef = ref(database, `collaborative-notes/${noteId}/metadata`);
-  update(noteRef, {
+
+  // We need to ensure the current user is added as a collaborator
+  // Using a path update to avoid overwriting other fields if we were just updating title,
+  // but here we are setting initial metadata or updating it.
+  // Let's use update with a specific path for collaborators to be safe.
+
+  const updates: any = {
     title: title,
     modified: Date.now(),
-  });
+  };
+
+  // Add current user as collaborator
+  updates[`collaborators/${currentUser.uid}`] = {
+    email: currentUser.email,
+    displayName: currentUser.displayName,
+    role: "owner",
+  };
+
+  return update(noteRef, updates);
 };
 
 // Get all collaborative notes for current user
@@ -371,9 +405,17 @@ const getTitle = (content: string) => {
   return content.split("\n")[0].replace("#", "");
 };
 
-// Set initial notes from localStorage
-notes = Object.assign(
-  {},
-  emptyNotes,
-  JSON.parse(localStorage.getItem("notes") || "null")
-);
+// Set initial notes from localStorage (will be empty until user logs in)
+notes = Object.assign({}, emptyNotes);
+
+export const renderLocalNotes = () => {
+  if (renderSidebarCallback && currentUser) {
+    // Load user-specific notes from localStorage
+    const storageKey = `notes_${currentUser.uid}`;
+    const localNotes = JSON.parse(localStorage.getItem(storageKey) || "null");
+    if (localNotes) {
+      notes = Object.assign({}, emptyNotes, localNotes);
+    }
+    renderSidebarCallback(notes);
+  }
+};

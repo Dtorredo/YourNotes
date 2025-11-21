@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import http from "http";
 import WebSocket, { WebSocketServer } from "ws";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import path from "path";
 
 dotenv.config();
 
@@ -22,6 +23,10 @@ const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from the built client
+const clientDistPath = path.join(__dirname, "../../dist/client");
+app.use(express.static(clientDistPath));
 
 const buildEditPrompt = (
   selection: string,
@@ -112,19 +117,58 @@ app.post("/api/ai", async (req: Request, res: Response): Promise<any> => {
   }
 });
 
+// Catch-all route to serve index.html for client-side routing
+app.get("*", (req: Request, res: Response) => {
+  res.sendFile(path.join(clientDistPath, "index.html"));
+});
+
 // HTTP server shared by Express and WebSocket
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Simple broadcast relay: any collab update from one client goes to all others.
-wss.on("connection", (ws: WebSocket) => {
+// Room management
+const rooms = new Map<string, Set<WebSocket>>();
+
+wss.on("connection", (ws: WebSocket, req: http.IncomingMessage) => {
+  // Extract noteId from URL parameters
+  // Expected URL: ws://localhost:4000/noteId
+  // or ws://localhost:4000?note=noteId
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const noteId = url.searchParams.get("note") || url.pathname.replace("/", "");
+
+  if (!noteId) {
+    ws.close();
+    return;
+  }
+
+  console.log(`Client connected to room: ${noteId}`);
+
+  if (!rooms.has(noteId)) {
+    rooms.set(noteId, new Set());
+  }
+  rooms.get(noteId)?.add(ws);
+
   ws.on("message", (data: any) => {
-    for (const client of wss.clients) {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        // Ensure data is sent as string, not Buffer
-        client.send(data.toString());
+    // Broadcast to all other clients in the SAME room
+    const room = rooms.get(noteId);
+    if (room) {
+      for (const client of room) {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+          client.send(data);
+        }
       }
     }
+  });
+
+  ws.on("close", () => {
+    const room = rooms.get(noteId);
+    if (room) {
+      room.delete(ws);
+      if (room.size === 0) {
+        rooms.delete(noteId);
+      }
+    }
+    console.log(`Client disconnected from room: ${noteId}`);
   });
 });
 

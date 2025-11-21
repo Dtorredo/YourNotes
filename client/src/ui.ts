@@ -29,7 +29,6 @@ const aiSelectionPrompt = document.getElementById(
 const aiEditToggle = document.getElementById("ai-edit-toggle") as HTMLElement;
 const newCollabBtn = document.getElementById("new-collab-btn") as HTMLElement;
 
-let hasAutoTitle = false;
 console.log("ui.ts loaded");
 
 const AI_API_BASE =
@@ -89,7 +88,9 @@ list.addEventListener("click", (event: Event) => {
 });
 
 const changeCollaborativeNote = async (noteId: string) => {
-  await renderCollaborativeNote(noteId);
+  // Open collaborative note in a new tab
+  const shareLink = getShareableLink(noteId);
+  window.open(shareLink, "_blank");
 };
 
 // Show/hide share button based on active note
@@ -124,7 +125,6 @@ export const renderNote = (title: string) => {
   activeNote.isCollaborative = false;
   activeNote.noteId = null;
   activeNote.lockedTitle = !!(notes[title] && notes[title].lockedTitle);
-  // hasAutoTitle = !!activeNote.lockedTitle; // Local variable
 
   // Destroy collaborative note if switching from collaborative
   if (currentCollaborativeNote) {
@@ -211,7 +211,9 @@ const saveNotes = () => {
 };
 
 const getTitle = (content: string) => {
-  return content.split("\n")[0].replace("#", "");
+  // Extract first 4 words
+  const words = content.trim().split(/\s+/);
+  return words.slice(0, 4).join(" ");
 };
 
 const debounce = (func: Function) => {
@@ -233,7 +235,6 @@ export const reset = () => {
   activeNote.isCollaborative = false;
   activeNote.noteId = null;
   activeNote.lockedTitle = false;
-  hasAutoTitle = false;
 
   if (currentCollaborativeNote) {
     currentCollaborativeNote.destroy();
@@ -357,19 +358,15 @@ export const createNewCollaborativeNoteUI = async () => {
     const noteId = await createCollaborativeNote(textarea, "");
     console.log("Note created with ID:", noteId);
 
-    await renderCollaborativeNote(noteId);
-    console.log("Note rendered successfully");
+    // Refresh sidebar to show the new note title immediately
+    const collabNotes = await getCollaborativeNotes();
+    renderSidebar(notes, collabNotes);
 
-    // Show share button
-    const shareBtn = document.getElementById("share-btn");
-    if (shareBtn) {
-      shareBtn.style.display = "block";
-    }
-
-    // Show success message with share link
+    // Open the collaborative note in a new tab
     if (typeof getShareableLink === "function") {
       const shareLink = getShareableLink(noteId);
-      console.log("Share link:", shareLink);
+      console.log("Opening collaborative note in new tab:", shareLink);
+      window.open(shareLink, "_blank");
     }
   } catch (error: any) {
     console.error("Error creating collaborative note:", error);
@@ -447,8 +444,27 @@ const toggleAiEditPrompt = () => {
 
   if (aiSelectionToolbar.classList.contains("hidden")) {
     aiSelectionToolbar.classList.remove("hidden");
-    if (aiSelectionPrompt && !aiSelectionPrompt.value) {
-      aiSelectionPrompt.value = "Improve clarity but keep the meaning.";
+    // Keep input empty - user will use placeholder or type their own prompt
+    if (aiSelectionPrompt) {
+      aiSelectionPrompt.focus();
+    }
+
+    // Re-apply the selection to keep text highlighted
+    if (activeSelectionRange && textarea) {
+      setTimeout(() => {
+        textarea.setSelectionRange(
+          activeSelectionRange.start,
+          activeSelectionRange.end
+        );
+        // Make textarea appear focused with selection visible
+        textarea.focus();
+        // Then immediately focus back to input so user can type
+        setTimeout(() => {
+          if (aiSelectionPrompt) {
+            aiSelectionPrompt.focus();
+          }
+        }, 100);
+      }, 50);
     }
   } else {
     hideAiToolbar();
@@ -542,8 +558,14 @@ export const applyAiEdit = async () => {
 };
 
 export const generateAiSummary = async () => {
-  if (hasAutoTitle) return;
-  // if (activeNote.isCollaborative) return; // Allow for collaborative notes
+  // Check if title is already locked for this note
+  const currentNoteData = notes[activeNote.title];
+  if (
+    activeNote.lockedTitle ||
+    (currentNoteData && currentNoteData.lockedTitle)
+  ) {
+    return;
+  }
 
   const content = textarea.value.trim();
   if (!content) return;
@@ -557,8 +579,6 @@ export const generateAiSummary = async () => {
     if (!result) {
       return;
     }
-
-    hasAutoTitle = true;
 
     if (activeNote.isCollaborative && activeNote.noteId) {
       updateCollaborativeNoteTitle(activeNote.noteId, result.trim());
@@ -608,14 +628,25 @@ if (textarea) {
   textarea.addEventListener("mouseup", handleSelectionChange);
   textarea.addEventListener("keyup", handleSelectionChange);
 
-  // Trigger automatic AI title once per note when user starts typing
+  // Debounced AI summary trigger (20 seconds after typing stops)
+  let aiSummaryTimeout: any = null;
+
   textarea.addEventListener("input", () => {
     const currentNoteData = notes[activeNote.title];
     const isLocked =
       activeNote.lockedTitle ||
       (currentNoteData && currentNoteData.lockedTitle);
-    if (!isLocked && !hasAutoTitle && textarea.value.trim().length > 40) {
-      generateAiSummary();
+
+    // Clear existing timeout
+    if (aiSummaryTimeout) {
+      clearTimeout(aiSummaryTimeout);
+    }
+
+    // Set new timeout for AI summary (20 seconds)
+    if (!isLocked && textarea.value.trim().length > 10) {
+      aiSummaryTimeout = setTimeout(() => {
+        generateAiSummary();
+      }, 20000); // 20 seconds
     }
   });
 }
