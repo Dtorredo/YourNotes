@@ -1,0 +1,23 @@
+{
+  "name": "yournote",
+  "main": "app.js",
+  "scripts": {
+    "start": "serve -p 7713",
+    "server": "node server/server.js",
+    "dev": "concurrently \"npm run start\" \"npm run server\""
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.5.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "lib0": "^0.2.114",
+    "serve": "2.0.0",
+    "y-indexeddb": "^9.0.12",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
